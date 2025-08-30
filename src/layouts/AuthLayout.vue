@@ -5,7 +5,7 @@
         <h1 class="text-primary text-2xl font-bold">Savure Express</h1>
       </div>
 
-      <slot />
+      <router-view />
 
       <p class="text-neutral-light text-sm text-center mt-6">
         © 2025 Savure Express. All rights reserved.
