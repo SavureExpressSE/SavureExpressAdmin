@@ -7,7 +7,7 @@
     </div>
 
     <div v-if="showCatForm" class="form-card">
-      <input v-model="catForm.name" class="form-input" placeholder="Category name" />
+      <input v-model="catForm.name" class="form-input" placeholder="Category name *" />
       <input v-model="catForm.description" class="form-input" placeholder="Description (optional)" />
       <div class="form-actions">
         <button class="btn-primary" @click="submitCategory">Save</button>
@@ -46,7 +46,7 @@
         </label>
       </div>
       <div class="form-actions">
-        <button class="btn-primary" @click="submitItem">Save Item</button>
+        <button class="btn-primary" @click="submitItem">{{ itemForm.id ? 'Update' : 'Save' }} Item</button>
         <button class="btn-ghost" @click="showItemForm = false">Cancel</button>
       </div>
     </div>
