@@ -23,8 +23,32 @@
       <table v-else class="data-table">
         <thead>
           <tr>
-            <th v-for="col in columns" :key="col.key">{{ col.label }}</th>
-            <th v-if="$slots.rowActions">Actions</th>
+            <th
+              v-for="col in columns"
+              :key="col.key"
+              :class="['th-cell', col.sortable && 'th-sortable', sortBy === col.key && 'th-active']"
+              @click="col.sortable && handleSort(col.key)"
+            >
+              <span class="th-label">{{ col.label }}</span>
+              <span v-if="col.sortable" class="sort-icon">
+                <!-- Unsorted -->
+                <svg v-if="sortBy !== col.key" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M6 2L3.5 5h5L6 2z" fill="currentColor" opacity=".4"/>
+                  <path d="M6 10L8.5 7h-5L6 10z" fill="currentColor" opacity=".4"/>
+                </svg>
+                <!-- Ascending -->
+                <svg v-else-if="sortDir === 'asc'" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M6 2L3.5 6h5L6 2z" fill="#6c72ff"/>
+                  <path d="M4 8h4" stroke="#6c72ff" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <!-- Descending -->
+                <svg v-else width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M6 10L3.5 6h5L6 10z" fill="#6c72ff"/>
+                  <path d="M4 4h4" stroke="#6c72ff" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </span>
+            </th>
+            <th v-if="$slots.rowActions" class="th-cell">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -39,17 +63,20 @@
     </div>
 
     <!-- Pagination -->
-    <div v-if="(totalPages ?? 0) > 1" class="dt-pagination">
-      <span class="page-info">Page {{ (currentPage ?? 0) + 1 }} of {{ totalPages }} · {{ totalElements }} records</span>
-      <div class="page-btns">
-        <button class="page-btn" :disabled="currentPage === 0" @click="$emit('update:currentPage', 0)">«</button>
-        <button class="page-btn" :disabled="currentPage === 0" @click="$emit('update:currentPage', (currentPage ?? 0) - 1)">‹</button>
-        <button v-for="p in visiblePages" :key="p" :class="['page-btn', p === currentPage && 'page-btn--active']" @click="$emit('update:currentPage', p)">{{ p + 1 }}</button>
-        <button class="page-btn" :disabled="(currentPage ?? 0) >= (totalPages ?? 1) - 1" @click="$emit('update:currentPage', (currentPage ?? 0) + 1)">›</button>
-        <button class="page-btn" :disabled="(currentPage ?? 0) >= (totalPages ?? 1) - 1" @click="$emit('update:currentPage', (totalPages ?? 1) - 1)">»</button>
-      </div>
-      <select class="page-size-select" :value="pageSize" @change="$emit('update:pageSize', Number(($event.target as HTMLSelectElement).value))">
-        <option v-for="s in [10, 20, 50]" :key="s" :value="s">{{ s }} / page</option>
+    <div v-if="(totalElements ?? 0) > 0" class="dt-pagination">
+      <span class="page-info">{{ totalElements }} records</span>
+      <template v-if="(totalPages ?? 0) > 1">
+        <div class="page-btns">
+          <button class="page-btn" :disabled="currentPage === 0" @click="$emit('update:currentPage', 0)">«</button>
+          <button class="page-btn" :disabled="currentPage === 0" @click="$emit('update:currentPage', (currentPage ?? 0) - 1)">‹</button>
+          <button v-for="p in visiblePages" :key="p" :class="['page-btn', p === currentPage && 'page-btn--active']" @click="$emit('update:currentPage', p)">{{ p + 1 }}</button>
+          <button class="page-btn" :disabled="(currentPage ?? 0) >= (totalPages ?? 1) - 1" @click="$emit('update:currentPage', (currentPage ?? 0) + 1)">›</button>
+          <button class="page-btn" :disabled="(currentPage ?? 0) >= (totalPages ?? 1) - 1" @click="$emit('update:currentPage', (totalPages ?? 1) - 1)">»</button>
+        </div>
+        <span class="page-info">Page {{ (currentPage ?? 0) + 1 }} of {{ totalPages }}</span>
+      </template>
+      <select class="page-size-select" style="margin-left: auto" :value="pageSize" @change="$emit('update:pageSize', Number(($event.target as HTMLSelectElement).value))">
+        <option v-for="s in [5, 10, 20, 50]" :key="s" :value="s">{{ s }} / page</option>
       </select>
     </div>
   </div>
@@ -59,7 +86,7 @@
 import { computed } from 'vue'
 
 const props = defineProps<{
-  columns: { key: string; label: string }[]
+  columns: { key: string; label: string; sortable?: boolean }[]
   rows: Record<string, any>[]
   loading?: boolean
   search?: string
@@ -69,13 +96,23 @@ const props = defineProps<{
   pageSize?: number
   totalPages?: number
   totalElements?: number
+  sortBy?: string
+  sortDir?: 'asc' | 'desc'
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'update:search': [value: string]
   'update:currentPage': [value: number]
   'update:pageSize': [value: number]
+  'sort': [payload: { sortBy: string; sortDir: 'asc' | 'desc' }]
 }>()
+
+function handleSort(key: string) {
+  const newDir = props.sortBy === key
+    ? (props.sortDir === 'asc' ? 'desc' : 'asc')
+    : 'asc'
+  emit('sort', { sortBy: key, sortDir: newDir })
+}
 
 const visiblePages = computed(() => {
   const total = props.totalPages ?? 1
@@ -96,13 +133,23 @@ const visiblePages = computed(() => {
 .search-clear { position: absolute; right: 8px; background: none; border: none; color: #aeb9e1; cursor: pointer; font-size: 12px; }
 .dt-filters { display: flex; gap: 8px; flex-wrap: wrap; }
 .dt-actions { margin-left: auto; display: flex; gap: 8px; }
+
 .table-wrap { background: #212c4d; border-radius: 12px; overflow: hidden; }
 .data-table { width: 100%; border-collapse: collapse; }
-.data-table th { background: #37446b; color: #aeb9e1; font-size: 12px; text-transform: uppercase; padding: 12px 16px; text-align: left; white-space: nowrap; }
+
+.th-cell { background: #37446b; color: #aeb9e1; font-size: 12px; text-transform: uppercase; padding: 12px 16px; text-align: left; white-space: nowrap; }
+.th-sortable { cursor: pointer; user-select: none; }
+.th-sortable:hover { background: #4a5580; color: #fff; }
+.th-active { color: #6c72ff; }
+.th-cell > span { display: inline-flex; align-items: center; gap: 5px; }
+
+.sort-icon { flex-shrink: 0; display: inline-flex; align-items: center; }
+
 .data-table td { padding: 12px 16px; color: #d1dbf9; font-size: 14px; border-bottom: 1px solid #37446b; }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tr:hover td { background: #263356; }
 .empty-state { color: #aeb9e1; text-align: center; padding: 40px; }
+
 .dt-pagination { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .page-info { font-size: 13px; color: #aeb9e1; }
 .page-btns { display: flex; gap: 4px; margin-left: auto; }

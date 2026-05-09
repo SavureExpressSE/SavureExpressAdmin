@@ -73,7 +73,7 @@ const search = ref('')
 const statusFilter = ref('')
 const typeFilter = ref('')
 const page = ref(0)
-const pageSize = ref(10)
+const pageSize = ref(5)
 const totalPages = ref(0)
 const totalElements = ref(0)
 

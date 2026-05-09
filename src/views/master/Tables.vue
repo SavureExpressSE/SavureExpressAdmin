@@ -2,96 +2,149 @@
   <div>
     <div class="section-header">
       <div class="section-title">Dining Tables</div>
-      <button class="btn-primary" @click="addTable">+ Add Table</button>
     </div>
 
-    <div v-if="loading" class="empty-state">Loading tables…</div>
-    <div v-else-if="!tables.length" class="empty-state">No tables found. Add your first table.</div>
-    <div v-else class="table-grid">
-      <div v-for="table in tables" :key="table.id" :class="['table-card', statusClass(table.status)]">
-        <div class="table-number">Table {{ table.id }}</div>
-        <div class="table-status">{{ table.status }}</div>
-        <div class="table-qr" v-if="table.qrCode">{{ table.qrCode }}</div>
-        <div class="table-actions">
-          <select class="status-select" :value="table.status" @change="(e) => changeStatus(table.id, (e.target as HTMLSelectElement).value)">
-            <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
-          </select>
-          <button class="btn-del" @click="remove(table.id)">🗑️</button>
-        </div>
-      </div>
-    </div>
+    <DataTable
+      v-model:search="search"
+      v-model:currentPage="page"
+      v-model:pageSize="pageSize"
+      :columns="columns"
+      :rows="tables"
+      :loading="loading"
+      :totalPages="totalPages"
+      :totalElements="totalElements"
+      search-placeholder="Search by QR code…"
+      :sortBy="sortBy"
+      :sortDir="sortDir"
+      @update:search="onSearch"
+      @update:currentPage="load"
+      @update:pageSize="onPageSizeChange"
+      @sort="({ sortBy: sb, sortDir: sd }) => { sortBy = sb; sortDir = sd; page = 0; load() }"
+    >
+      <template #filters>
+        <select v-model.number="filterRestaurantId" class="filter-select" @change="onFilter">
+          <option value="">All Restaurants</option>
+          <option v-for="r in allRestaurants" :key="r.id" :value="r.id">{{ r.name }}</option>
+        </select>
+        <select v-model="filterStatus" class="filter-select" @change="onFilter">
+          <option value="">All Status</option>
+          <option value="AVAILABLE">Available</option>
+          <option value="OCCUPIED">Occupied</option>
+          <option value="RESERVED">Reserved</option>
+        </select>
+        <button v-if="filterRestaurantId || filterStatus" class="btn-clear-filter" @click="clearFilters">✕ Clear</button>
+      </template>
 
-    <div class="legend">
-      <span class="leg-item">🟢 Available</span>
-      <span class="leg-item">🔴 Occupied</span>
-      <span class="leg-item">🟡 Reserved</span>
-    </div>
+      <template #cell-status="{ row, value }">
+        <select :value="value" class="status-select" @change="(e) => changeStatus(row.id, (e.target as HTMLSelectElement).value)">
+          <option value="AVAILABLE">AVAILABLE</option>
+          <option value="OCCUPIED">OCCUPIED</option>
+          <option value="RESERVED">RESERVED</option>
+        </select>
+      </template>
+
+      <template #cell-qrCode="{ value }">
+        <span class="qr-val">{{ value ?? '—' }}</span>
+      </template>
+
+      <template #rowActions="{ row }">
+        <button class="btn-icon danger" @click="remove(row.id)">🗑️</button>
+      </template>
+    </DataTable>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, onMounted } from 'vue'
-import { api } from '@/utils/request'
+import DataTable from '@/components/DataTable.vue'
+import { tableService, type DiningTable } from '@/services/table-service'
+import { restaurantService, type Restaurant } from '@/services/restaurant-service'
 
-interface DiningTable { id: number; status: string; qrCode: string | null }
+const columns = [
+  { key: 'id', label: 'Table #', sortable: true },
+  { key: 'restaurantName', label: 'Restaurant', sortable: true },
+  { key: 'qrCode', label: 'QR Code' },
+  { key: 'status', label: 'Status', sortable: true },
+]
 
 const tables = ref<DiningTable[]>([])
+const allRestaurants = ref<Restaurant[]>([])
 const loading = ref(false)
-const RESTAURANT_ID = 1
-const statuses = ['AVAILABLE', 'OCCUPIED', 'RESERVED']
 
-function statusClass(status: string) {
-  if (status === 'AVAILABLE') return 'status-available'
-  if (status === 'OCCUPIED') return 'status-occupied'
-  return 'status-reserved'
-}
+const search = ref('')
+const filterRestaurantId = ref<number | ''>('')
+const filterStatus = ref('')
+const sortBy = ref('id')
+const sortDir = ref<'asc' | 'desc'>('asc')
+const page = ref(0)
+const pageSize = ref(5)
+const totalPages = ref(0)
+const totalElements = ref(0)
 
 async function load() {
   loading.value = true
-  try { tables.value = await api.get<DiningTable[]>(`/tables/restaurant/${RESTAURANT_ID}`) }
-  finally { loading.value = false }
-}
-
-async function addTable() {
-  await api.post('/tables', { restaurantId: RESTAURANT_ID })
-  await load()
+  try {
+    const res = await tableService.filter({
+      page: page.value, size: pageSize.value,
+      sortBy: sortBy.value, sortDir: sortDir.value,
+      restaurantId: filterRestaurantId.value || undefined,
+      status: filterStatus.value || undefined,
+      qrCode: search.value || undefined,
+    })
+    tables.value = res.data.content
+    totalPages.value = res.data.totalPages
+    totalElements.value = res.data.totalElements
+  } finally {
+    loading.value = false
+  }
 }
 
 async function changeStatus(id: number, status: string) {
-  await api.patch(`/tables/${id}/status`, { status })
-  await load()
+  try {
+    await tableService.updateStatus(id, status)
+    await load()
+  } catch (e: any) {
+    alert(e.message)
+  }
 }
 
 async function remove(id: number) {
   if (!confirm('Delete this table?')) return
-  await api.delete(`/tables/${id}`)
-  await load()
+  try {
+    await tableService.delete(id)
+    await load()
+  } catch (e: any) {
+    alert(e.message)
+  }
 }
 
-onMounted(load)
+let searchTimer: ReturnType<typeof setTimeout>
+function onSearch() {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { page.value = 0; load() }, 350)
+}
+function onFilter() { page.value = 0; load() }
+function onPageSizeChange() { page.value = 0; load() }
+function clearFilters() { filterRestaurantId.value = ''; filterStatus.value = ''; page.value = 0; load() }
+
+onMounted(async () => {
+  const res = await restaurantService.getAll()
+  allRestaurants.value = Array.isArray(res) ? res : (res as any).data ?? []
+  await load()
+})
 </script>
 
 <style scoped>
-.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .section-title { color: #fff; font-size: 16px; font-weight: 600; }
-.btn-primary { background: #6c72ff; color: #fff; border: none; border-radius: 8px; padding: 8px 18px; font-size: 14px; cursor: pointer; }
-.btn-primary:hover { background: #4a4fcc; }
-.table-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
-.table-card { border-radius: 12px; padding: 16px; text-align: center; border: 2px solid transparent; display: flex; flex-direction: column; gap: 8px; }
-.table-number { font-size: 16px; font-weight: 700; color: #fff; }
-.table-status { font-size: 12px; font-weight: 600; }
-.table-qr { font-size: 10px; color: #7e89ac; }
-.table-actions { display: flex; gap: 6px; align-items: center; justify-content: center; margin-top: 4px; }
-.status-select { background: #37446b; border: none; color: #fff; border-radius: 6px; padding: 4px 6px; font-size: 11px; cursor: pointer; flex: 1; }
-.btn-del { background: transparent; border: none; cursor: pointer; font-size: 14px; opacity: 0.6; }
-.btn-del:hover { opacity: 1; }
-.status-available { background: #14532d33; border-color: #22c55e; }
-.status-available .table-status { color: #22c55e; }
-.status-occupied { background: #450a0a33; border-color: #ef4444; }
-.status-occupied .table-status { color: #ef4444; }
-.status-reserved { background: #451a0333; border-color: #f59e0b; }
-.status-reserved .table-status { color: #f59e0b; }
-.legend { display: flex; gap: 24px; }
-.leg-item { font-size: 13px; color: #aeb9e1; }
-.empty-state { color: #aeb9e1; text-align: center; padding: 40px; }
+.btn-icon { background: transparent; border: none; font-size: 16px; cursor: pointer; padding: 4px; }
+.btn-icon.danger { opacity: 0.7; }
+.btn-icon.danger:hover { opacity: 1; }
+.filter-select { background: #37446b; border: 1px solid #4a5580; border-radius: 8px; padding: 8px 14px; color: #fff; font-size: 13px; outline: none; cursor: pointer; }
+.filter-select:focus { border-color: #6c72ff; }
+.btn-clear-filter { background: transparent; border: 1px solid #4a5580; border-radius: 8px; padding: 7px 12px; color: #aeb9e1; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.btn-clear-filter:hover { border-color: #ef4444; color: #ef4444; }
+.status-select { background: #2a3a5e; border: 1px solid #4a5580; border-radius: 6px; padding: 4px 8px; color: #fff; font-size: 12px; cursor: pointer; outline: none; }
+.status-select:focus { border-color: #6c72ff; }
+.qr-val { font-size: 12px; color: #7e89ac; font-family: monospace; }
 </style>

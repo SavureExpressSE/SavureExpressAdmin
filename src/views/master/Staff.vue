@@ -7,55 +7,93 @@
 
     <div v-if="showForm" class="form-card">
       <div class="form-row">
-        <input v-model="form.firstName" class="form-input" placeholder="First name *" />
-        <input v-model="form.lastName" class="form-input" placeholder="Last name *" />
+        <FloatingInput v-model="form.firstName" label="First name *" />
+        <FloatingInput v-model="form.lastName" label="Last name *" />
       </div>
       <div class="form-row">
-        <input v-model="form.email" class="form-input" type="email" placeholder="Email *" />
-        <input v-model="form.password" class="form-input" type="password" placeholder="Password *" />
+        <FloatingInput v-model="form.email" label="Email *" type="email" />
+        <FloatingInput v-model="form.password" label="Password *" type="password" />
       </div>
-      <select v-model="form.role" class="form-input">
+      <FloatingSelect v-model="form.role" label="Role *">
         <option value="STAFF">Staff</option>
         <option value="OWNER">Owner</option>
         <option value="ADMIN">Admin</option>
-      </select>
+      </FloatingSelect>
+      <p v-if="formError" class="error-msg">{{ formError }}</p>
       <div class="form-actions">
         <button class="btn-primary" @click="submitStaff">Save</button>
         <button class="btn-ghost" @click="showForm = false">Cancel</button>
       </div>
-      <p v-if="error" class="error-msg">{{ error }}</p>
     </div>
 
-    <div v-if="loading" class="empty-state">Loading…</div>
-    <div v-else-if="!staff.length" class="empty-state">No staff registered yet.</div>
-    <div v-else class="table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr><th>#</th><th>Name</th><th>Email</th><th>Role</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="s in staff" :key="s.id">
-            <td>{{ s.id }}</td>
-            <td>{{ s.firstName }} {{ s.lastName }}</td>
-            <td>{{ s.email }}</td>
-            <td><span :class="['role-badge', roleClass(s.role)]">{{ s.role }}</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      v-model:search="search"
+      v-model:currentPage="page"
+      v-model:pageSize="pageSize"
+      :columns="columns"
+      :rows="staff"
+      :loading="loading"
+      :totalPages="totalPages"
+      :totalElements="totalElements"
+      search-placeholder="Search by email…"
+      :sortBy="sortBy"
+      :sortDir="sortDir"
+      @update:search="onSearch"
+      @update:currentPage="load"
+      @update:pageSize="onPageSizeChange"
+      @sort="({ sortBy: sb, sortDir: sd }) => { sortBy = sb; sortDir = sd; page = 0; load() }"
+    >
+      <template #filters>
+        <select v-model="filterRole" class="filter-select" @change="onFilter">
+          <option value="">All Roles</option>
+          <option value="ADMIN">Admin</option>
+          <option value="OWNER">Owner</option>
+          <option value="STAFF">Staff</option>
+        </select>
+        <button v-if="filterRole" class="btn-clear-filter" @click="clearFilters">✕ Clear</button>
+      </template>
+
+      <template #cell-role="{ value }">
+        <span :class="['role-badge', roleClass(value)]">{{ value }}</span>
+      </template>
+
+      <template #cell-firstName="{ row }">
+        {{ row.firstName }} {{ row.lastName }}
+      </template>
+    </DataTable>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, reactive, onMounted } from 'vue'
-import { staffService, type Staff } from '@/services/staff-service'
+import DataTable from '@/components/DataTable.vue'
+import FloatingInput from '@/components/FloatingInput.vue'
+import FloatingSelect from '@/components/FloatingSelect.vue'
+import { userService, type User } from '@/services/user-service'
 import { api } from '@/utils/request'
 
-const staff = ref<Staff[]>([])
+const columns = [
+  { key: 'id', label: '#', sortable: true },
+  { key: 'firstName', label: 'Name', sortable: true },
+  { key: 'email', label: 'Email', sortable: true },
+  { key: 'role', label: 'Role' },
+  { key: 'restaurantName', label: 'Restaurant' },
+]
+
+const staff = ref<User[]>([])
 const loading = ref(false)
 const showForm = ref(false)
-const error = ref<string | null>(null)
+const formError = ref<string | null>(null)
 const form = reactive({ firstName: '', lastName: '', email: '', password: '', role: 'STAFF' })
+
+const search = ref('')
+const filterRole = ref('')
+const sortBy = ref('firstName')
+const sortDir = ref<'asc' | 'desc'>('asc')
+const page = ref(0)
+const pageSize = ref(5)
+const totalPages = ref(0)
+const totalElements = ref(0)
 
 function roleClass(role: string) {
   if (role === 'ADMIN') return 'role-admin'
@@ -64,26 +102,51 @@ function roleClass(role: string) {
 }
 
 async function submitStaff() {
-  error.value = null
-  if (!form.firstName || !form.email || !form.password) { error.value = 'Please fill required fields'; return }
+  formError.value = null
+  if (!form.firstName || !form.email || !form.password) {
+    formError.value = 'First name, email and password are required'; return
+  }
   try {
-    await api.post('/auth/register', { firstName: form.firstName, lastName: form.lastName, email: form.email, passwordHash: form.password, role: form.role })
+    await api.post('/auth/register', {
+      firstName: form.firstName, lastName: form.lastName,
+      email: form.email, passwordHash: form.password, role: form.role,
+    })
     Object.assign(form, { firstName: '', lastName: '', email: '', password: '', role: 'STAFF' })
     showForm.value = false
-    await loadStaff()
+    page.value = 0
+    await load()
   } catch (e: any) {
-    error.value = e.message
+    formError.value = e.message
   }
 }
 
-async function loadStaff() {
+async function load() {
   loading.value = true
-  try { staff.value = await staffService.getAll() }
-  catch { staff.value = [] }
-  finally { loading.value = false }
+  try {
+    const res = await userService.filter({
+      page: page.value, size: pageSize.value,
+      sortBy: sortBy.value, sortDir: sortDir.value,
+      email: search.value || undefined,
+      role: filterRole.value || undefined,
+    })
+    staff.value = res.data.content
+    totalPages.value = res.data.totalPages
+    totalElements.value = res.data.totalElements
+  } finally {
+    loading.value = false
+  }
 }
 
-onMounted(loadStaff)
+let searchTimer: ReturnType<typeof setTimeout>
+function onSearch() {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { page.value = 0; load() }, 350)
+}
+function onFilter() { page.value = 0; load() }
+function onPageSizeChange() { page.value = 0; load() }
+function clearFilters() { filterRole.value = ''; page.value = 0; load() }
+
+onMounted(load)
 </script>
 
 <style scoped>
@@ -98,14 +161,12 @@ onMounted(loadStaff)
 .form-input:focus { border-color: #6c72ff; }
 .form-actions { display: flex; gap: 12px; }
 .error-msg { color: #ef4444; font-size: 13px; }
-.table-wrap { background: #212c4d; border-radius: 12px; overflow: hidden; }
-.data-table { width: 100%; border-collapse: collapse; }
-.data-table th { background: #37446b; color: #aeb9e1; font-size: 12px; text-transform: uppercase; padding: 12px 16px; text-align: left; }
-.data-table td { padding: 12px 16px; color: #d1dbf9; font-size: 14px; border-bottom: 1px solid #37446b; }
-.data-table tr:last-child td { border-bottom: none; }
+.filter-select { background: #37446b; border: 1px solid #4a5580; border-radius: 8px; padding: 8px 14px; color: #fff; font-size: 13px; outline: none; cursor: pointer; }
+.filter-select:focus { border-color: #6c72ff; }
+.btn-clear-filter { background: transparent; border: 1px solid #4a5580; border-radius: 8px; padding: 7px 12px; color: #aeb9e1; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.btn-clear-filter:hover { border-color: #ef4444; color: #ef4444; }
 .role-badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 600; }
 .role-admin { background: #4a235a; color: #d4aaee; }
 .role-owner { background: #451a03; color: #fdb52a; }
 .role-staff { background: #1e3a5f; color: #57c3ff; }
-.empty-state { color: #aeb9e1; text-align: center; padding: 40px; }
 </style>

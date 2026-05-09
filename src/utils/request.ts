@@ -1,7 +1,15 @@
+import router from '@/router'
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 function getToken(): string | null {
   return localStorage.getItem('token')
+}
+
+function clearSession() {
+  localStorage.removeItem('token')
+  localStorage.removeItem('userEmail')
+  localStorage.removeItem('userRole')
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -15,8 +23,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers })
 
   if (response.status === 401) {
-    localStorage.removeItem('token')
-    window.location.href = '/auth/login'
+    clearSession()
+    router.replace({ name: 'Login' })
     throw new Error('Unauthorized')
   }
 
@@ -26,7 +34,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   const text = await response.text()
-  return text ? JSON.parse(text) : (null as T)
+  if (!text) return null as T
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    return text as unknown as T
+  }
 }
 
 export const api = {

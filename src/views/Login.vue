@@ -3,24 +3,12 @@
   <form @submit.prevent="login">
     <!-- Email -->
     <div class="mb-4">
-      <label class="block text-neutral-lighter text-sm mb-2">Email</label>
-      <input
-        v-model="email"
-        class="w-full p-3 rounded-lg bg-neutral-base text-white focus:ring-2 focus:ring-primary outline-none"
-        placeholder="Enter your email"
-        type="email"
-      />
+      <FloatingInput v-model="email" label="Email" type="email" />
     </div>
 
     <!-- Password -->
     <div class="mb-4">
-      <label class="block text-neutral-lighter text-sm mb-2">Password</label>
-      <input
-        v-model="password"
-        class="w-full p-3 rounded-lg bg-neutral-base text-white focus:ring-2 focus:ring-primary outline-none"
-        placeholder="Enter your password"
-        type="password"
-      />
+      <FloatingInput v-model="password" label="Password" type="password" />
     </div>
 
     <!-- Error -->
@@ -47,6 +35,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import FloatingInput from '@/components/FloatingInput.vue'
 
 const email = ref('')
 const password = ref('')

@@ -3,25 +3,46 @@
     <!-- Category Section -->
     <div class="section-header">
       <div class="section-title">Menu Categories</div>
-      <button class="btn-primary" @click="showCatForm = !showCatForm">+ Add Category</button>
+      <button class="btn-primary" @click="openCatForm()">+ Add Category</button>
     </div>
 
     <div v-if="showCatForm" class="form-card">
-      <input v-model="catForm.name" class="form-input" placeholder="Category name *" />
-      <input v-model="catForm.description" class="form-input" placeholder="Description (optional)" />
+      <div class="form-row">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
+          <FloatingInput v-model="catForm.name" label="Category name *" />
+          <span v-if="catNameError" class="field-error">{{ catNameError }}</span>
+        </div>
+        <FloatingInput v-model="catForm.description" label="Description (optional)" />
+      </div>
+      <p v-if="catFormError" class="error-msg">{{ catFormError }}</p>
       <div class="form-actions">
-        <button class="btn-primary" @click="submitCategory">Save</button>
+        <button class="btn-primary" @click="submitCategory">{{ catForm.id ? 'Update' : 'Save' }}</button>
         <button class="btn-ghost" @click="showCatForm = false">Cancel</button>
       </div>
     </div>
 
-    <div class="chips-row">
-      <span v-for="cat in menuStore.categories" :key="cat.id" class="category-chip">
-        {{ cat.name }}
-        <button class="chip-del" @click="menuStore.deleteCategory(cat.id)">✕</button>
-      </span>
-      <span v-if="!menuStore.categories.length" class="empty-inline">No categories yet.</span>
-    </div>
+    <DataTable
+      v-model:search="catSearch"
+      v-model:currentPage="catPage"
+      v-model:pageSize="catPageSize"
+      :columns="catColumns"
+      :rows="categories"
+      :loading="catLoading"
+      :totalPages="catTotalPages"
+      :totalElements="catTotalElements"
+      search-placeholder="Search categories…"
+      :sortBy="catSortBy"
+      :sortDir="catSortDir"
+      @update:search="onCatSearch"
+      @update:currentPage="loadCategories"
+      @update:pageSize="onCatPageSizeChange"
+      @sort="({ sortBy: sb, sortDir: sd }) => { catSortBy = sb; catSortDir = sd; catPage = 0; loadCategories() }"
+    >
+      <template #rowActions="{ row }">
+        <button class="btn-icon" @click="openCatForm(row as MenuCategory)">✏️</button>
+        <button class="btn-icon danger" @click="removeCategory(row.id)">🗑️</button>
+      </template>
+    </DataTable>
 
     <!-- Menu Items Section -->
     <div class="section-header" style="margin-top: 32px;">
@@ -31,94 +52,275 @@
 
     <div v-if="showItemForm" class="form-card">
       <div class="form-row">
-        <input v-model="itemForm.name" class="form-input" placeholder="Item name *" />
-        <input v-model.number="itemForm.price" class="form-input" type="number" placeholder="Price *" />
+        <FloatingInput v-model="itemForm.name" label="Item name *" />
+        <FloatingInput v-model.number="itemForm.price" label="Base Price *" type="number" />
       </div>
-      <input v-model="itemForm.description" class="form-input" placeholder="Description" />
-      <div class="form-row">
-        <select v-model.number="itemForm.menuCategoryId" class="form-input">
-          <option value="" disabled>Select Category *</option>
-          <option v-for="c in menuStore.categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-        <label class="form-toggle">
-          <input v-model="itemForm.availability" type="checkbox" />
-          <span>Available</span>
-        </label>
-      </div>
+      <FloatingInput v-model="itemForm.description" label="Description" />
+      <FloatingSelect v-model.number="itemForm.menuCategoryId" label="Category *">
+        <option v-for="c in allCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
+      </FloatingSelect>
+      <p v-if="itemFormError" class="error-msg">{{ itemFormError }}</p>
       <div class="form-actions">
         <button class="btn-primary" @click="submitItem">{{ itemForm.id ? 'Update' : 'Save' }} Item</button>
         <button class="btn-ghost" @click="showItemForm = false">Cancel</button>
       </div>
     </div>
 
-    <div v-if="menuStore.loading" class="empty-state">Loading…</div>
-    <div v-else-if="!menuStore.items.length" class="empty-state">No menu items yet.</div>
-    <div v-else class="table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr><th>Name</th><th>Category</th><th>Description</th><th>Price</th><th>Available</th><th>Actions</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="item in menuStore.items" :key="item.id">
-            <td>{{ item.name }}</td>
-            <td><span class="badge">{{ item.menuCategoryName }}</span></td>
-            <td class="desc-cell">{{ item.description ?? '—' }}</td>
-            <td>₹{{ item.price }}</td>
-            <td><span :class="item.availability ? 'avail-yes' : 'avail-no'">{{ item.availability ? '✅' : '❌' }}</span></td>
-            <td>
-              <button class="btn-icon" @click="openItemForm(item)">✏️</button>
-              <button class="btn-icon danger" @click="menuStore.deleteItem(item.id)">🗑️</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      v-model:search="itemSearch"
+      v-model:currentPage="itemPage"
+      v-model:pageSize="itemPageSize"
+      :columns="itemColumns"
+      :rows="items"
+      :loading="itemLoading"
+      :totalPages="itemTotalPages"
+      :totalElements="itemTotalElements"
+      search-placeholder="Search by item name…"
+      :sortBy="itemSortBy"
+      :sortDir="itemSortDir"
+      @update:search="onItemSearch"
+      @update:currentPage="loadItems"
+      @update:pageSize="onItemPageSizeChange"
+      @sort="({ sortBy: sb, sortDir: sd }) => { itemSortBy = sb; itemSortDir = sd; itemPage = 0; loadItems() }"
+    >
+      <template #filters>
+        <select v-model="filterCategoryId" class="filter-select" @change="onItemFilter">
+          <option value="">All Categories</option>
+          <option v-for="c in allCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
+        </select>
+        <input v-model.number="filterMinPrice" class="filter-input" type="number" placeholder="Min ₹" @change="onItemFilter" />
+        <input v-model.number="filterMaxPrice" class="filter-input" type="number" placeholder="Max ₹" @change="onItemFilter" />
+        <button v-if="filterCategoryId || filterMinPrice || filterMaxPrice" class="btn-clear-filter" @click="clearItemFilters">✕ Clear</button>
+      </template>
+      <template #cell-menuCategoryName="{ value }">
+        <span class="badge">{{ value }}</span>
+      </template>
+      <template #cell-price="{ value }">₹{{ value }}</template>
+      <template #rowActions="{ row }">
+        <button class="btn-icon" @click="openItemForm(row as MenuItem)">✏️</button>
+        <button class="btn-icon danger" @click="removeItem(row.id)">🗑️</button>
+      </template>
+    </DataTable>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive, onMounted } from 'vue'
-import { useMenuStore } from '@/stores/menu'
-import type { MenuItem } from '@/services/menu-service'
+import { ref, reactive, watch, nextTick, onMounted } from 'vue'
+import DataTable from '@/components/DataTable.vue'
+import FloatingInput from '@/components/FloatingInput.vue'
+import FloatingSelect from '@/components/FloatingSelect.vue'
+import { menuService, type MenuCategory, type MenuItem } from '@/services/menu-service'
 
-const menuStore = useMenuStore()
-const RESTAURANT_ID = 1
+// ── Category section ──────────────────────────────────────────────────────────
+const catColumns = [
+  { key: 'id', label: '#', sortable: true },
+  { key: 'name', label: 'Name', sortable: true },
+  { key: 'description', label: 'Description' },
+]
 
+const categories = ref<MenuCategory[]>([])
+const allCategories = ref<MenuCategory[]>([])
+const catLoading = ref(false)
 const showCatForm = ref(false)
-const catForm = reactive({ name: '', description: '' })
+const catFormError = ref<string | null>(null)
+const catNameError = ref<string | null>(null)
+let isInitializingCatForm = false
+let catNameTimer: ReturnType<typeof setTimeout>
 
+const catSearch = ref('')
+const catSortBy = ref('name')
+const catSortDir = ref<'asc' | 'desc'>('asc')
+const catPage = ref(0)
+const catPageSize = ref(5)
+const catTotalPages = ref(0)
+const catTotalElements = ref(0)
+
+const blankCatForm = () => ({ id: undefined as number | undefined, name: '', description: '' })
+const catForm = reactive(blankCatForm())
+
+function openCatForm(cat?: MenuCategory) {
+  catFormError.value = null
+  catNameError.value = null
+  isInitializingCatForm = true
+  Object.assign(catForm, cat
+    ? { id: cat.id, name: cat.name, description: cat.description ?? '' }
+    : blankCatForm())
+  showCatForm.value = true
+  nextTick(() => { isInitializingCatForm = false })
+}
+
+watch(() => catForm.name, (val) => {
+  if (isInitializingCatForm) return
+  catNameError.value = null
+  clearTimeout(catNameTimer)
+  if (!val || !val.trim()) return
+  catNameTimer = setTimeout(async () => {
+    try {
+      const res = await menuService.checkDuplicateCategoryName(val.trim(), catForm.id)
+      if (res.data) catNameError.value = 'This category name already exists'
+    } catch {}
+  }, 400)
+})
+
+async function submitCategory() {
+  if (!catForm.name.trim()) { catFormError.value = 'Category name is required'; return }
+  if (catNameError.value) return
+  catFormError.value = null
+  try {
+    await menuService.saveCategory({ id: catForm.id, name: catForm.name, description: catForm.description || undefined })
+    showCatForm.value = false
+    catPage.value = 0
+    await Promise.all([loadCategories(), loadAllCategories()])
+  } catch (e: any) {
+    catFormError.value = e.message
+  }
+}
+
+async function removeCategory(id: number) {
+  if (!confirm('Delete this category?')) return
+  try {
+    await menuService.deleteCategory(id)
+    await Promise.all([loadCategories(), loadAllCategories()])
+  } catch (e: any) {
+    alert(e.message)
+  }
+}
+
+async function loadCategories() {
+  catLoading.value = true
+  try {
+    const res = await menuService.filterCategories({
+      page: catPage.value, size: catPageSize.value,
+      sortBy: catSortBy.value, sortDir: catSortDir.value,
+      name: catSearch.value || undefined,
+    })
+    categories.value = res.data.content
+    catTotalPages.value = res.data.totalPages
+    catTotalElements.value = res.data.totalElements
+  } finally {
+    catLoading.value = false
+  }
+}
+
+async function loadAllCategories() {
+  const res = await menuService.getAllCategories()
+  allCategories.value = res.data
+}
+
+let catSearchTimer: ReturnType<typeof setTimeout>
+function onCatSearch() {
+  clearTimeout(catSearchTimer)
+  catSearchTimer = setTimeout(() => { catPage.value = 0; loadCategories() }, 350)
+}
+function onCatPageSizeChange() { catPage.value = 0; loadCategories() }
+
+// ── Menu Items section ────────────────────────────────────────────────────────
+const itemColumns = [
+  { key: 'name', label: 'Name', sortable: true },
+  { key: 'menuCategoryName', label: 'Category' },
+  { key: 'description', label: 'Description' },
+  { key: 'price', label: 'Base Price', sortable: true },
+]
+
+const items = ref<MenuItem[]>([])
+const itemLoading = ref(false)
 const showItemForm = ref(false)
-const itemForm = reactive({ id: undefined as number | undefined, name: '', description: '', price: 0, menuCategoryId: '' as any, availability: true })
+const itemFormError = ref<string | null>(null)
+
+const itemSearch = ref('')
+const filterCategoryId = ref<number | ''>('')
+const filterMinPrice = ref<number | undefined>(undefined)
+const filterMaxPrice = ref<number | undefined>(undefined)
+const itemSortBy = ref('name')
+const itemSortDir = ref<'asc' | 'desc'>('asc')
+const itemPage = ref(0)
+const itemPageSize = ref(5)
+const itemTotalPages = ref(0)
+const itemTotalElements = ref(0)
+
+const blankItemForm = () => ({
+  id: undefined as number | undefined,
+  name: '', description: '', price: 0,
+  menuCategoryId: '' as number | '',
+})
+const itemForm = reactive(blankItemForm())
 
 function openItemForm(item?: MenuItem) {
-  if (item) {
-    Object.assign(itemForm, { id: item.id, name: item.name, description: item.description ?? '', price: item.price, menuCategoryId: item.menuCategoryId, availability: item.availability })
-  } else {
-    Object.assign(itemForm, { id: undefined, name: '', description: '', price: 0, menuCategoryId: '', availability: true })
-  }
+  itemFormError.value = null
+  Object.assign(itemForm, item
+    ? { id: item.id, name: item.name, description: item.description ?? '', price: item.price, menuCategoryId: item.menuCategoryId }
+    : blankItemForm())
   showItemForm.value = true
 }
 
-async function submitCategory() {
-  if (!catForm.name.trim()) return
-  await menuStore.saveCategory({ name: catForm.name, description: catForm.description || undefined })
-  Object.assign(catForm, { name: '', description: '' })
-  showCatForm.value = false
-}
-
 async function submitItem() {
-  if (!itemForm.name || !itemForm.price || !itemForm.menuCategoryId) return
-  await menuStore.saveItem({ id: itemForm.id, restaurantId: RESTAURANT_ID, menuCategoryId: itemForm.menuCategoryId, name: itemForm.name, description: itemForm.description || undefined, price: itemForm.price, availability: itemForm.availability })
-  showItemForm.value = false
+  if (!itemForm.name || !itemForm.price || !itemForm.menuCategoryId) {
+    itemFormError.value = 'Name, price and category are required'; return
+  }
+  itemFormError.value = null
+  try {
+    await menuService.saveItem({
+      id: itemForm.id,
+      menuCategoryId: itemForm.menuCategoryId as number,
+      name: itemForm.name, description: itemForm.description || undefined,
+      price: itemForm.price,
+    })
+    showItemForm.value = false
+    itemPage.value = 0
+    await loadItems()
+  } catch (e: any) {
+    itemFormError.value = e.message
+  }
 }
 
-onMounted(() => menuStore.fetchAll())
+async function removeItem(id: number) {
+  if (!confirm('Delete this menu item?')) return
+  try {
+    await menuService.deleteItem(id)
+    await loadItems()
+  } catch (e: any) {
+    alert(e.message)
+  }
+}
+
+async function loadItems() {
+  itemLoading.value = true
+  try {
+    const res = await menuService.filterItems({
+      page: itemPage.value, size: itemPageSize.value,
+      sortBy: itemSortBy.value, sortDir: itemSortDir.value,
+      name: itemSearch.value || undefined,
+      menuCategoryId: filterCategoryId.value || undefined,
+      minPrice: filterMinPrice.value || undefined,
+      maxPrice: filterMaxPrice.value || undefined,
+    })
+    items.value = res.data.content
+    itemTotalPages.value = res.data.totalPages
+    itemTotalElements.value = res.data.totalElements
+  } finally {
+    itemLoading.value = false
+  }
+}
+
+let itemSearchTimer: ReturnType<typeof setTimeout>
+function onItemSearch() {
+  clearTimeout(itemSearchTimer)
+  itemSearchTimer = setTimeout(() => { itemPage.value = 0; loadItems() }, 350)
+}
+function onItemFilter() { itemPage.value = 0; loadItems() }
+function onItemPageSizeChange() { itemPage.value = 0; loadItems() }
+function clearItemFilters() { filterCategoryId.value = ''; filterMinPrice.value = undefined; filterMaxPrice.value = undefined; itemPage.value = 0; loadItems() }
+
+onMounted(async () => {
+  await loadAllCategories()
+  await Promise.all([loadCategories(), loadItems()])
+})
 </script>
 
 <style scoped>
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .section-title { color: #fff; font-size: 16px; font-weight: 600; }
-.btn-primary { background: #6c72ff; color: #fff; border: none; border-radius: 8px; padding: 8px 18px; font-size: 14px; cursor: pointer; transition: 0.2s; }
+.btn-primary { background: #6c72ff; color: #fff; border: none; border-radius: 8px; padding: 8px 18px; font-size: 14px; cursor: pointer; }
 .btn-primary:hover { background: #4a4fcc; }
 .btn-ghost { background: transparent; color: #aeb9e1; border: 1px solid #37446b; border-radius: 8px; padding: 8px 18px; font-size: 14px; cursor: pointer; }
 .btn-icon { background: transparent; border: none; font-size: 16px; cursor: pointer; padding: 4px; }
@@ -130,19 +332,15 @@ onMounted(() => menuStore.fetchAll())
 .form-input:focus { border-color: #6c72ff; }
 .form-toggle { display: flex; align-items: center; gap: 8px; color: #aeb9e1; font-size: 14px; }
 .form-actions { display: flex; gap: 12px; }
-.chips-row { display: flex; flex-wrap: wrap; gap: 10px; }
-.category-chip { display: flex; align-items: center; gap: 6px; background: #37446b; color: #57c3ff; border-radius: 20px; padding: 6px 14px; font-size: 13px; }
-.chip-del { background: none; border: none; color: #aeb9e1; cursor: pointer; font-size: 12px; }
-.chip-del:hover { color: #ef4444; }
-.empty-inline { color: #aeb9e1; font-size: 13px; }
-.table-wrap { background: #212c4d; border-radius: 12px; overflow: hidden; }
-.data-table { width: 100%; border-collapse: collapse; }
-.data-table th { background: #37446b; color: #aeb9e1; font-size: 12px; text-transform: uppercase; padding: 12px 16px; text-align: left; }
-.data-table td { padding: 12px 16px; color: #d1dbf9; font-size: 14px; border-bottom: 1px solid #37446b; }
-.data-table tr:last-child td { border-bottom: none; }
+.error-msg { color: #ef4444; font-size: 13px; }
+.field-error { color: #ef4444; font-size: 11px; padding-left: 14px; }
+.filter-select { background: #37446b; border: 1px solid #4a5580; border-radius: 8px; padding: 8px 14px; color: #fff; font-size: 13px; outline: none; cursor: pointer; }
+.filter-select:focus { border-color: #6c72ff; }
+.btn-clear-filter { background: transparent; border: 1px solid #4a5580; border-radius: 8px; padding: 7px 12px; color: #aeb9e1; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.btn-clear-filter:hover { border-color: #ef4444; color: #ef4444; }
+.filter-input { background: #37446b; border: 1px solid #4a5580; border-radius: 8px; padding: 8px 12px; color: #fff; font-size: 13px; outline: none; width: 90px; }
+.filter-input:focus { border-color: #6c72ff; }
 .badge { background: #1e3a5f; color: #57c3ff; font-size: 11px; padding: 2px 8px; border-radius: 4px; }
-.desc-cell { color: #7e89ac; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.avail-yes { color: #22c55e; }
-.avail-no { color: #ef4444; }
-.empty-state { color: #aeb9e1; text-align: center; padding: 40px; }
+.avail-yes { color: #22c55e; font-size: 12px; font-weight: 600; }
+.avail-no { color: #ef4444; font-size: 12px; font-weight: 600; }
 </style>

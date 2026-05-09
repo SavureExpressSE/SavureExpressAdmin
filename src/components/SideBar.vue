@@ -60,7 +60,6 @@ const allGroups = [
     items: [
       { to: '/master/restaurant', icon: '🏪', label: 'Restaurants' },
       { to: '/master/menu', icon: '🍔', label: 'Menu' },
-      { to: '/master/tables', icon: '🪑', label: 'Tables' },
       { to: '/master/staff', icon: '👥', label: 'Staff' },
       { to: '/master/locations', icon: '🌍', label: 'Locations' },
     ],
