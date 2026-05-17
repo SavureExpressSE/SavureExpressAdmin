@@ -54,6 +54,17 @@ const hasValue = computed(() => props.modelValue !== null && props.modelValue !=
 .fi-input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; }
 .fi-input[type='number'] { -moz-appearance: textfield; }
 
+/* Override browser autofill background so dark theme is preserved */
+.fi-input:-webkit-autofill,
+.fi-input:-webkit-autofill:hover,
+.fi-input:-webkit-autofill:focus,
+.fi-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #212c4d inset !important;
+  -webkit-text-fill-color: #fff !important;
+  caret-color: #fff;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
 /* ── Floating label ────────────────────────────────── */
 .fi-label {
   position: absolute;

@@ -1,9 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authService, type LoginPayload } from '@/services/auth-service'
+import { setToken, configureAuth } from '@/utils/request'
+import router from '@/router'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem('token'))
+  // Token lives in memory only — never persisted to localStorage (XSS-safe)
+  const token = ref<string | null>(null)
+  // Email and role are not sensitive — keep them across page refreshes
   const email = ref<string | null>(localStorage.getItem('userEmail'))
   const role = ref<string | null>(localStorage.getItem('userRole'))
   const loading = ref(false)
@@ -13,17 +17,21 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => role.value === 'ADMIN')
   const isOwner = computed(() => role.value === 'OWNER')
 
+  // Call once on app startup to wire request.ts callbacks
+  function init() {
+    configureAuth(
+      (newToken) => { token.value = newToken },
+      () => { _clear() },
+    )
+    setToken(token.value)
+  }
+
   async function login(payload: LoginPayload) {
     loading.value = true
     error.value = null
     try {
       const res = await authService.login(payload)
-      token.value = res.token
-      email.value = res.email
-      role.value = res.role
-      localStorage.setItem('token', res.token)
-      localStorage.setItem('userEmail', res.email)
-      localStorage.setItem('userRole', res.role)
+      _applySession(res.token, res.email, res.role)
     } catch (e: any) {
       error.value = e.message ?? 'Login failed'
       throw e
@@ -32,14 +40,42 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  function logout() {
+  // Silently restores session from the HttpOnly refresh cookie on page load
+  async function tryRestoreSession(): Promise<boolean> {
+    try {
+      const res = await authService.refresh()
+      _applySession(res.token, res.email, res.role)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function logout() {
+    try {
+      await authService.logout()
+    } catch { /* ignore network errors on logout */ }
+    _clear()
+    router.replace({ name: 'Login' })
+  }
+
+  function _applySession(t: string, e: string, r: string) {
+    token.value = t
+    email.value = e
+    role.value = r
+    setToken(t)
+    localStorage.setItem('userEmail', e)
+    localStorage.setItem('userRole', r)
+  }
+
+  function _clear() {
     token.value = null
     email.value = null
     role.value = null
-    localStorage.removeItem('token')
+    setToken(null)
     localStorage.removeItem('userEmail')
     localStorage.removeItem('userRole')
   }
 
-  return { token, email, role, loading, error, isAuthenticated, isAdmin, isOwner, login, logout }
+  return { token, email, role, loading, error, isAuthenticated, isAdmin, isOwner, init, login, logout, tryRestoreSession }
 })

@@ -10,11 +10,17 @@ export interface Restaurant {
   outletType?: string
   isActive?: boolean
   address?: {
+    id?: number
     street?: string
+    lane?: string
+    zipCodeId?: number
+    zipCode?: string
     city?: string
+    cityId?: number
     state?: string
-    zipcode?: string
+    stateId?: number
     country?: string
+    countryId?: number
   }
 }
 
@@ -24,7 +30,14 @@ export interface RestaurantPayload {
   code: string
   email: string
   mobile: string
-  address?: Restaurant['address']
+  outletType?: string
+  isActive?: boolean
+  address?: {
+    street: string
+    lane: string
+    zipcodeId?: number
+    cityId?: number
+  }
 }
 
 export interface RestaurantFilter extends FilterBase {
@@ -43,4 +56,9 @@ export const restaurantService = {
   delete: (id: number) => api.delete<string>(`/restaurant/${id}`),
   filter: (f: RestaurantFilter) =>
     api.post<ApiResponse<SpringPage<Restaurant>>>('/restaurant/filter', f),
+  checkCode: (code: string, excludeId?: number) => {
+    const q = new URLSearchParams({ code })
+    if (excludeId) q.append('excludeId', String(excludeId))
+    return api.get<ApiResponse<boolean>>(`/restaurant/check-code?${q.toString()}`)
+  },
 }

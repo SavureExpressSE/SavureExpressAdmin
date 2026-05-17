@@ -1,6 +1,14 @@
 import { api } from '@/utils/request'
 
-export interface Country { id: number; name: string; code: string }
+export interface Country {
+  id: number
+  name: string
+  code: string
+  dial?: string
+  flag?: string
+  phoneLenMin?: number
+  phoneLenMax?: number
+}
 export interface State { id: number; name: string; code: string; countryId: number; countryName: string }
 export interface City { id: number; name: string; stateId?: number; stateName: string; countryId?: number; countryName: string }
 export interface Zipcode { id: number; code: string; cityId?: number; city: string; stateId?: number; state: string; countryId?: number; country: string }
@@ -16,7 +24,7 @@ interface FilterBase { page?: number; size?: number; sortBy?: string; sortDir?: 
 export const locationService = {
   // Country
   getCountries: () => api.get<Country[]>('/country'),
-  saveCountry: (payload: { id?: number; name: string; code: string }) => api.post<Country>('/country', payload),
+  saveCountry: (payload: { id?: number; name: string; code: string; dial?: string; flag?: string; phoneLenMin?: number; phoneLenMax?: number }) => api.post<Country>('/country', payload),
   deleteCountry: (id: number) => api.delete<string>(`/country/${id}`),
   filterCountries: (params: FilterBase & { name?: string; code?: string }) =>
     api.post<{ data: PageResult<Country> }>('/country/filter', params),

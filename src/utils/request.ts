@@ -1,31 +1,77 @@
 import router from '@/router'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
-function getToken(): string | null {
-  return localStorage.getItem('token')
+// Token held in memory — set by auth store on login/refresh, never touches localStorage
+let _token: string | null = null
+let _onTokenRefreshed: ((token: string) => void) | null = null
+let _onSessionExpired: (() => void) | null = null
+
+export function setToken(t: string | null) {
+  _token = t
 }
 
-function clearSession() {
-  localStorage.removeItem('token')
-  localStorage.removeItem('userEmail')
-  localStorage.removeItem('userRole')
+export function configureAuth(
+  onRefreshed: (token: string) => void,
+  onExpired: () => void,
+) {
+  _onTokenRefreshed = onRefreshed
+  _onSessionExpired = onExpired
+}
+
+// Deduplicates concurrent 401 refresh attempts into one request
+let _refreshing: Promise<string | null> | null = null
+
+async function attemptSilentRefresh(): Promise<string | null> {
+  if (_refreshing) return _refreshing
+  _refreshing = (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      const newToken: string = data.token
+      _token = newToken
+      _onTokenRefreshed?.(newToken)
+      return newToken
+    } catch {
+      return null
+    } finally {
+      _refreshing = null
+    }
+  })()
+  return _refreshing
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   }
-  if (token) headers['Authorization'] = `Bearer ${token}`
+  if (_token) headers['Authorization'] = `Bearer ${_token}`
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers })
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: 'include',
+  })
 
   if (response.status === 401) {
-    clearSession()
+    const newToken = await attemptSilentRefresh()
+    if (newToken) {
+      const retryHeaders = { ...headers, Authorization: `Bearer ${newToken}` }
+      const retry = await fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        headers: retryHeaders,
+        credentials: 'include',
+      })
+      if (retry.ok) return parseBody<T>(retry)
+    }
+    _onSessionExpired?.()
     router.replace({ name: 'Login' })
-    throw new Error('Unauthorized')
+    throw new Error('Session expired')
   }
 
   if (!response.ok) {
@@ -33,6 +79,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new Error(error.message || `HTTP ${response.status}`)
   }
 
+  return parseBody<T>(response)
+}
+
+async function parseBody<T>(response: Response): Promise<T> {
   const text = await response.text()
   if (!text) return null as T
   try {

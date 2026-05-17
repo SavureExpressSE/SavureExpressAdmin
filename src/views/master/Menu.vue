@@ -9,7 +9,7 @@
     <div v-if="showCatForm" class="form-card">
       <div class="form-row">
         <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
-          <FloatingInput v-model="catForm.name" label="Category name *" />
+          <FloatingInput v-model="catForm.name" label="Category name *" maxlength="255" />
           <span v-if="catNameError" class="field-error">{{ catNameError }}</span>
         </div>
         <FloatingInput v-model="catForm.description" label="Description (optional)" />
@@ -106,6 +106,7 @@
 
 <script lang="ts" setup>
 import { ref, reactive, watch, nextTick, onMounted } from 'vue'
+import { useConfirm } from '@/composables/useConfirm'
 import DataTable from '@/components/DataTable.vue'
 import FloatingInput from '@/components/FloatingInput.vue'
 import FloatingSelect from '@/components/FloatingSelect.vue'
@@ -117,6 +118,8 @@ const catColumns = [
   { key: 'name', label: 'Name', sortable: true },
   { key: 'description', label: 'Description' },
 ]
+
+const { confirm } = useConfirm()
 
 const categories = ref<MenuCategory[]>([])
 const allCategories = ref<MenuCategory[]>([])
@@ -164,6 +167,7 @@ watch(() => catForm.name, (val) => {
 
 async function submitCategory() {
   if (!catForm.name.trim()) { catFormError.value = 'Category name is required'; return }
+  if (catForm.name.trim().length > 255) { catFormError.value = 'Name must be 255 characters or fewer'; return }
   if (catNameError.value) return
   catFormError.value = null
   try {
@@ -177,7 +181,7 @@ async function submitCategory() {
 }
 
 async function removeCategory(id: number) {
-  if (!confirm('Delete this category?')) return
+  if (!await confirm('Delete this category?')) return
   try {
     await menuService.deleteCategory(id)
     await Promise.all([loadCategories(), loadAllCategories()])
@@ -274,7 +278,7 @@ async function submitItem() {
 }
 
 async function removeItem(id: number) {
-  if (!confirm('Delete this menu item?')) return
+  if (!await confirm('Delete this menu item?')) return
   try {
     await menuService.deleteItem(id)
     await loadItems()

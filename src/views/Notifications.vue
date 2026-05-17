@@ -168,6 +168,7 @@ notification.push.service-account-path=
 
 <script lang="ts" setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useConfirm } from '@/composables/useConfirm'
 import { api } from '@/utils/request'
 import DataTable from '@/components/DataTable.vue'
 
@@ -185,6 +186,8 @@ const logColumns = [
   { key: 'sentAt', label: 'Sent At' },
 ]
 const logs = ref<any[]>([])
+const { confirm } = useConfirm()
+
 const logLoading = ref(false)
 const logSearch = ref('')
 const channelFilter = ref('')
@@ -239,7 +242,7 @@ async function toggleTemplate(id: number) {
   await loadTemplates()
 }
 async function deleteTemplate(id: number) {
-  if (!confirm('Delete template?')) return
+  if (!await confirm('Delete template?')) return
   await api.delete(`/notifications/templates/${id}`); await loadTemplates()
 }
 

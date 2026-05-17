@@ -19,9 +19,23 @@
             <FloatingInput v-model="countryForm.name" label="Country name *" />
             <span v-if="countryNameError" class="field-error">{{ countryNameError }}</span>
           </div>
-          <div class="field-wrap" style="max-width:140px">
+          <div class="field-wrap" style="max-width:130px">
             <FloatingInput v-model="countryForm.code" label="Code * (e.g. IN)" />
             <span v-if="countryCodeError" class="field-error">{{ countryCodeError }}</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field-wrap" style="max-width:140px">
+            <FloatingInput v-model="countryForm.dial" label="Dial code (e.g. +91)" />
+          </div>
+          <div class="field-wrap" style="max-width:110px">
+            <FloatingInput v-model="countryForm.flag" label="Flag emoji" />
+          </div>
+          <div class="field-wrap" style="max-width:130px">
+            <FloatingInput v-model="countryForm.phoneLenMin" label="Phone min digits" />
+          </div>
+          <div class="field-wrap" style="max-width:130px">
+            <FloatingInput v-model="countryForm.phoneLenMax" label="Phone max digits" />
           </div>
         </div>
         <p v-if="countryFormError" class="error-msg">{{ countryFormError }}</p>
@@ -47,7 +61,10 @@
         @update:pageSize="() => { country.page = 0; loadCountries() }"
         @sort="({ sortBy: sb, sortDir: sd }) => { country.sortBy = sb; country.sortDir = sd; country.page = 0; loadCountries() }"
       >
+        <template #cell-flag="{ value }"><span class="country-flag">{{ value }}</span></template>
         <template #cell-code="{ value }"><span class="badge">{{ value }}</span></template>
+        <template #cell-dial="{ value }"><span class="badge badge--dial">{{ value }}</span></template>
+        <template #cell-phoneLen="{ value }"><span class="badge badge--len">{{ value }}</span></template>
         <template #rowActions="{ row }">
           <button class="btn-icon" @click="editCountry(row)">✏️</button>
           <button class="btn-icon danger" @click="deleteCountry(row.id)">🗑️</button>
@@ -247,10 +264,13 @@
 
 <script lang="ts" setup>
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
+import { useConfirm } from '@/composables/useConfirm'
 import DataTable from '@/components/DataTable.vue'
 import FloatingInput from '@/components/FloatingInput.vue'
 import FloatingSelect from '@/components/FloatingSelect.vue'
 import { locationService, type Country, type State, type City } from '@/services/location-service'
+
+const { confirm } = useConfirm()
 
 const tabs = ['Country', 'State', 'City', 'Zipcode'] as const
 type Tab = typeof tabs[number]
@@ -258,7 +278,12 @@ const activeTab = ref<Tab>('Country')
 
 // ── Columns ───────────────────────────────────────────
 const countryColumns = [
-  { key: 'id', label: '#', sortable: true }, { key: 'name', label: 'Name', sortable: true }, { key: 'code', label: 'Code', sortable: true },
+  { key: 'id',       label: '#',            sortable: true  },
+  { key: 'flag',     label: '',             sortable: false },
+  { key: 'name',     label: 'Name',         sortable: true  },
+  { key: 'code',     label: 'Code',         sortable: true  },
+  { key: 'dial',     label: 'Dial',         sortable: false },
+  { key: 'phoneLen', label: 'Phone Digits', sortable: false },
 ]
 const stateColumns = [
   { key: 'id', label: '#', sortable: true }, { key: 'name', label: 'Name', sortable: true }, { key: 'code', label: 'Code', sortable: true }, { key: 'countryName', label: 'Country' },
@@ -301,7 +326,7 @@ const cityFormError    = ref<string | null>(null)
 const cityNameError    = ref<string | null>(null)
 const zipcodeFormError = ref<string | null>(null)
 const zipcodeCodeError = ref<string | null>(null)
-const countryForm = reactive({ id: undefined as number | undefined, name: '', code: '' })
+const countryForm = reactive({ id: undefined as number | undefined, name: '', code: '', dial: '', flag: '', phoneLenMin: '' as string | number, phoneLenMax: '' as string | number })
 const stateForm   = reactive({ id: undefined as number | undefined, name: '', code: '', countryId: '' as any })
 const cityForm    = reactive({ id: undefined as number | undefined, name: '', countryId: '' as any, stateId: '' as any })
 const zipcodeForm = reactive({ id: undefined as number | undefined, code: '', countryId: '' as any, stateId: '' as any, cityId: '' as any })
@@ -318,7 +343,7 @@ function toggleForm(tab: keyof typeof forms) {
     if (tab === 'country') {
       isInitializingCountryForm = true
       countryFormError.value = null; countryNameError.value = null; countryCodeError.value = null
-      Object.assign(countryForm, { id: undefined, name: '', code: '' })
+      Object.assign(countryForm, { id: undefined, name: '', code: '', dial: '', flag: '', phoneLenMin: '', phoneLenMax: '' })
       nextTick(() => { isInitializingCountryForm = false })
     }
     if (tab === 'state') {
@@ -348,7 +373,15 @@ function editCountry(row: any) {
   countryFormError.value = null
   countryNameError.value = null
   countryCodeError.value = null
-  Object.assign(countryForm, { id: row.id, name: row.name, code: row.code })
+  Object.assign(countryForm, {
+    id: row.id,
+    name: row.name,
+    code: row.code,
+    dial: row.dial ?? '',
+    flag: row.flag ?? '',
+    phoneLenMin: row.phoneLenMin ?? '',
+    phoneLenMax: row.phoneLenMax ?? '',
+  })
   forms.country = true
   nextTick(() => { isInitializingCountryForm = false })
 }
@@ -470,7 +503,14 @@ async function loadCountries() {
   country.loading = true
   try {
     const res = await locationService.filterCountries({ page: country.page, size: country.pageSize, sortBy: country.sortBy, sortDir: country.sortDir, name: country.search || undefined })
-    country.rows = res.data.content; country.totalPages = res.data.totalPages; country.totalElements = res.data.totalElements
+    country.rows = res.data.content.map((r: any) => ({
+      ...r,
+      phoneLen: r.phoneLenMin != null && r.phoneLenMax != null
+        ? (r.phoneLenMin === r.phoneLenMax ? String(r.phoneLenMin) : `${r.phoneLenMin}–${r.phoneLenMax}`)
+        : '—',
+    }))
+    country.totalPages = res.data.totalPages
+    country.totalElements = res.data.totalElements
   } finally { country.loading = false }
 }
 
@@ -517,9 +557,19 @@ async function saveCountry() {
     return
   }
   if (countryNameError.value || countryCodeError.value) return
+  const minLen = countryForm.phoneLenMin !== '' ? Number(countryForm.phoneLenMin) : undefined
+  const maxLen = countryForm.phoneLenMax !== '' ? Number(countryForm.phoneLenMax) : undefined
   try {
-    await locationService.saveCountry({ id: countryForm.id, name: countryForm.name.trim(), code: countryForm.code.trim().toUpperCase() })
-    Object.assign(countryForm, { id: undefined, name: '', code: '' })
+    await locationService.saveCountry({
+      id: countryForm.id,
+      name: countryForm.name.trim(),
+      code: countryForm.code.trim().toUpperCase(),
+      dial: countryForm.dial.trim() || undefined,
+      flag: countryForm.flag.trim() || undefined,
+      phoneLenMin: minLen,
+      phoneLenMax: maxLen,
+    })
+    Object.assign(countryForm, { id: undefined, name: '', code: '', dial: '', flag: '', phoneLenMin: '', phoneLenMax: '' })
     countryFormError.value = null; countryNameError.value = null; countryCodeError.value = null
     forms.country = false; country.page = 0; await loadCountries()
   } catch (e: any) {
@@ -527,7 +577,7 @@ async function saveCountry() {
   }
 }
 async function deleteCountry(id: number) {
-  if (!confirm('Delete country?')) return
+  if (!await confirm('Delete country?')) return
   try { await locationService.deleteCountry(id) } catch (e: any) { alert(e.message); return }
   await loadCountries()
 }
@@ -550,7 +600,7 @@ async function saveState() {
   }
 }
 async function deleteState(id: number) {
-  if (!confirm('Delete state?')) return
+  if (!await confirm('Delete state?')) return
   try { await locationService.deleteState(id) } catch (e: any) { alert(e.message); return }
   await loadStates()
 }
@@ -573,7 +623,7 @@ async function saveCity() {
   }
 }
 async function deleteCity(id: number) {
-  if (!confirm('Delete city?')) return
+  if (!await confirm('Delete city?')) return
   try { await locationService.deleteCity(id) } catch (e: any) { alert(e.message); return }
   await loadCities()
 }
@@ -596,7 +646,7 @@ async function saveZipcode() {
   }
 }
 async function deleteZipcode(id: number) {
-  if (!confirm('Delete zipcode?')) return
+  if (!await confirm('Delete zipcode?')) return
   try { await locationService.deleteZipcode(id) } catch (e: any) { alert(e.message); return }
   await loadZipcodes()
 }
@@ -642,4 +692,7 @@ onMounted(async () => {
 .btn-clear-filter { background: transparent; border: 1px solid #4a5580; border-radius: 8px; padding: 7px 12px; color: #aeb9e1; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .btn-clear-filter:hover { border-color: #ef4444; color: #ef4444; }
 .badge { background: #1e3a5f; color: #57c3ff; font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+.badge--dial { background: #1e3a5f; color: #a78bfa; }
+.badge--len { background: #1e3a5f; color: #34d399; }
+.country-flag { font-size: 20px; line-height: 1; display: inline-block; }
 </style>

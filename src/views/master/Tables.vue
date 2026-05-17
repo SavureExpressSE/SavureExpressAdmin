@@ -56,6 +56,7 @@
 
 <script lang="ts" setup>
 import { ref, onMounted } from 'vue'
+import { useConfirm } from '@/composables/useConfirm'
 import DataTable from '@/components/DataTable.vue'
 import { tableService, type DiningTable } from '@/services/table-service'
 import { restaurantService, type Restaurant } from '@/services/restaurant-service'
@@ -69,6 +70,8 @@ const columns = [
 
 const tables = ref<DiningTable[]>([])
 const allRestaurants = ref<Restaurant[]>([])
+const { confirm } = useConfirm()
+
 const loading = ref(false)
 
 const search = ref('')
@@ -109,7 +112,7 @@ async function changeStatus(id: number, status: string) {
 }
 
 async function remove(id: number) {
-  if (!confirm('Delete this table?')) return
+  if (!await confirm('Delete this table?')) return
   try {
     await tableService.delete(id)
     await load()
