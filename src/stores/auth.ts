@@ -7,11 +7,12 @@ import router from '@/router'
 export const useAuthStore = defineStore('auth', () => {
   // Token lives in memory only — never persisted to localStorage (XSS-safe)
   const token = ref<string | null>(null)
-  // Email and role are not sensitive — keep them across page refreshes
   const email = ref<string | null>(localStorage.getItem('userEmail'))
   const role = ref<string | null>(localStorage.getItem('userRole'))
   const loading = ref(false)
   const error = ref<string | null>(null)
+  // Tracks whether the initial session restore attempt has completed
+  const sessionRestored = ref(false)
 
   const isAuthenticated = computed(() => !!token.value)
   const isAdmin = computed(() => role.value === 'ADMIN')
@@ -40,15 +41,22 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Silently restores session from the HttpOnly refresh cookie on page load
-  async function tryRestoreSession(): Promise<boolean> {
-    try {
-      const res = await authService.refresh()
-      _applySession(res.token, res.email, res.role)
-      return true
-    } catch {
-      return false
-    }
+  // Silently restores session from the HttpOnly refresh cookie — idempotent, safe to call multiple times
+  let _restorePromise: Promise<boolean> | null = null
+  function tryRestoreSession(): Promise<boolean> {
+    if (_restorePromise) return _restorePromise
+    _restorePromise = (async () => {
+      try {
+        const res = await authService.refresh()
+        _applySession(res.token, res.email, res.role)
+        return true
+      } catch {
+        return false
+      } finally {
+        sessionRestored.value = true
+      }
+    })()
+    return _restorePromise
   }
 
   async function logout() {
@@ -77,5 +85,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('userRole')
   }
 
-  return { token, email, role, loading, error, isAuthenticated, isAdmin, isOwner, init, login, logout, tryRestoreSession }
+  return { token, email, role, loading, error, isAuthenticated, isAdmin, isOwner, sessionRestored, init, login, logout, tryRestoreSession }
 })

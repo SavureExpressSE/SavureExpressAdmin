@@ -10,6 +10,7 @@ export interface User {
   role: string
   restaurantId: number | null
   restaurantName: string | null
+  active: boolean
 }
 
 export interface UserFilter extends FilterBase {
@@ -18,6 +19,7 @@ export interface UserFilter extends FilterBase {
   email?: string
   role?: string
   restaurantId?: number
+  active?: boolean
 }
 
 export interface UpdateUserPayload {
@@ -36,5 +38,6 @@ export const userService = {
   filter: (f: UserFilter) =>
     api.post<ApiResponse<SpringPage<User>>>('/users/filter', f),
   updateUser: (id: number, payload: UpdateUserPayload) => api.put<ApiResponse<User>>(`/users/${id}`, payload),
+  toggleActive: (id: number) => api.patch<ApiResponse<User>>(`/users/${id}/toggle-active`),
   deleteUser: (id: number) => api.delete<ApiResponse<string>>(`/users/${id}`),
 }

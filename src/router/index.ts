@@ -36,8 +36,15 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
+
+  // On first navigation after page load, wait for the refresh cookie restore to finish
+  // before deciding whether the user is authenticated
+  if (!auth.sessionRestored) {
+    await auth.tryRestoreSession()
+  }
+
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'Login' }
   }

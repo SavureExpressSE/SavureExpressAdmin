@@ -64,7 +64,12 @@
           <option value="">All Restaurants</option>
           <option v-for="r in allRestaurants" :key="r.id" :value="r.id">{{ r.name }}</option>
         </select>
-        <button v-if="filterRole || filterRestaurantId !== ''" class="btn-clear-filter" @click="clearFilters">✕ Clear</button>
+        <select v-model="filterActive" class="filter-select" @change="onFilter">
+          <option value="">All Status</option>
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
+        <button v-if="filterRole || filterRestaurantId !== '' || filterActive !== ''" class="btn-clear-filter" @click="clearFilters">✕ Clear</button>
       </template>
 
       <template #cell-role="{ value }">
@@ -73,6 +78,16 @@
 
       <template #cell-firstName="{ row }">
         {{ row.firstName }} {{ row.lastName }}
+      </template>
+
+      <template #cell-active="{ row }">
+        <button
+          class="toggle-btn"
+          :class="row.active ? 'toggle-on' : 'toggle-off'"
+          @click="toggleActive(row)"
+        >
+          <span class="toggle-knob" />
+        </button>
       </template>
 
       <template #rowActions="{ row }">
@@ -103,6 +118,7 @@ const columns = [
   { key: 'mobile',         label: 'Mobile',      sortable: false },
   { key: 'role',           label: 'Role',        sortable: false },
   { key: 'restaurantName', label: 'Restaurant',  sortable: false },
+  { key: 'active',         label: 'Status',      sortable: false },
 ]
 
 const staff = ref<User[]>([])
@@ -115,6 +131,7 @@ const form = reactive({ id: undefined as number | undefined, firstName: '', last
 const search = ref('')
 const filterRole = ref('')
 const filterRestaurantId = ref<number | ''>('')
+const filterActive = ref<'true' | 'false' | ''>('')
 const sortBy = ref('firstName')
 const sortDir = ref<'asc' | 'desc'>('asc')
 const page = ref(0)
@@ -195,6 +212,7 @@ async function load() {
       email: search.value || undefined,
       role: filterRole.value || undefined,
       restaurantId: filterRestaurantId.value !== '' ? filterRestaurantId.value : undefined,
+      active: filterActive.value !== '' ? filterActive.value === 'true' : undefined,
     })
     staff.value = res.data.content
     totalPages.value = res.data.totalPages
@@ -211,7 +229,16 @@ function onSearch() {
 }
 function onFilter() { page.value = 0; load() }
 function onPageSizeChange() { page.value = 0; load() }
-function clearFilters() { filterRole.value = ''; filterRestaurantId.value = ''; page.value = 0; load() }
+function clearFilters() { filterRole.value = ''; filterRestaurantId.value = ''; filterActive.value = ''; page.value = 0; load() }
+
+async function toggleActive(row: User) {
+  try {
+    const res = await userService.toggleActive(row.id)
+    row.active = res.data.active
+  } catch (e: any) {
+    alert(e.message)
+  }
+}
 
 async function deleteStaff(id: number) {
   if (!await confirm('Delete this staff member?')) return
@@ -254,4 +281,10 @@ onMounted(async () => {
 .role-admin { background: #4a235a; color: #d4aaee; }
 .role-owner { background: #451a03; color: #fdb52a; }
 .role-staff { background: #1e3a5f; color: #57c3ff; }
+.toggle-btn { position: relative; width: 38px; height: 20px; border-radius: 20px; border: none; cursor: pointer; transition: background 0.2s; padding: 0; flex-shrink: 0; }
+.toggle-on  { background: #22c55e; }
+.toggle-off { background: #4a5580; }
+.toggle-knob { position: absolute; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left 0.2s; }
+.toggle-on  .toggle-knob { left: 21px; }
+.toggle-off .toggle-knob { left: 3px; }
 </style>
