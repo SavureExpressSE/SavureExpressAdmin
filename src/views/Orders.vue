@@ -2,6 +2,8 @@
   <div>
     <div class="section-title">Orders</div>
 
+    <div v-if="error" class="error-banner">{{ error }}</div>
+
     <DataTable
       v-model:search="search"
       v-model:currentPage="page"
@@ -24,12 +26,20 @@
         <select v-model="typeFilter" class="filter-select" @change="onFilter">
           <option value="">All Types</option>
           <option value="DINE_IN">DINE_IN</option>
-          <option value="WALK_IN">WALK_IN</option>
+          <option value="TAKE_AWAY">TAKE_AWAY</option>
+          <option value="DELIVERY">DELIVERY</option>
         </select>
       </template>
 
       <template #cell-orderType="{ value }">
         <span class="badge">{{ value }}</span>
+      </template>
+
+      <template #cell-kioskTerminal="{ row }">
+        <span v-if="row.kioskTerminalCode" class="kiosk-badge" :title="row.kioskTerminalLabel">
+          {{ row.kioskTerminalCode }}
+        </span>
+        <span v-else class="text-muted">—</span>
       </template>
 
       <template #cell-orderStatus="{ value }">
@@ -50,25 +60,31 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { api } from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
 import DataTable from '@/components/DataTable.vue'
 
 interface PageResponse<T> { content: T[]; totalPages: number; totalElements: number; number: number }
-interface Order { id: number; customerName: string | null; orderType: string; orderStatus: string; totalAmount: number; items: any[] }
+interface Order { id: number; customerName: string | null; orderType: string; orderStatus: string; totalAmount: number; kioskTerminalCode: string | null; kioskTerminalLabel: string | null }
 
-const RESTAURANT_ID = 1
+const authStore = useAuthStore()
+// ADMIN has no restaurantId — they see all orders via /orders/search
+// OWNER/STAFF are scoped to their restaurant via /orders/restaurant/{id}/search
+const isGlobalAdmin = computed(() => authStore.role === 'ADMIN' && !authStore.restaurantId)
 const statuses = ['PENDING','CONFIRMED','PREPARING','READY','SERVED','COMPLETED','CANCELLED']
 const columns = [
   { key: 'id', label: '#' },
   { key: 'customerName', label: 'Customer' },
   { key: 'orderType', label: 'Type' },
+  { key: 'kioskTerminal', label: 'Kiosk' },
   { key: 'orderStatus', label: 'Status' },
   { key: 'totalAmount', label: 'Total' },
 ]
 
 const orders = ref<Order[]>([])
 const loading = ref(false)
+const error = ref<string | null>(null)
 const search = ref('')
 const statusFilter = ref('')
 const typeFilter = ref('')
@@ -81,6 +97,7 @@ let searchTimer: ReturnType<typeof setTimeout>
 
 async function load() {
   loading.value = true
+  error.value = null
   try {
     const params = new URLSearchParams({
       page: String(page.value),
@@ -90,10 +107,15 @@ async function load() {
     if (typeFilter.value) params.set('orderType', typeFilter.value)
     if (search.value) params.set('search', search.value)
 
-    const res = await api.get<PageResponse<Order>>(`/orders/restaurant/${RESTAURANT_ID}/search?${params}`)
+    const url = isGlobalAdmin.value
+      ? `/orders/search?${params}`
+      : `/orders/restaurant/${authStore.restaurantId}/search?${params}`
+    const res = await api.get<PageResponse<Order>>(url)
     orders.value = res.content
     totalPages.value = res.totalPages
     totalElements.value = res.totalElements
+  } catch (e: unknown) {
+    error.value = (e instanceof Error ? e.message : null) ?? 'Failed to load orders'
   } finally {
     loading.value = false
   }
@@ -134,4 +156,7 @@ onMounted(load)
 .status-yellow { background: #451a03; color: #f59e0b; }
 .status-blue { background: #1e3a5f; color: #57c3ff; }
 .status-select { background: #37446b; border: none; color: #fff; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+.error-banner { background: #450a0a; color: #ef4444; border: 1px solid #ef444433; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; }
+.kiosk-badge { background: #2d1f4d; color: #a78bfa; font-size: 11px; padding: 2px 8px; border-radius: 4px; font-family: monospace; }
+.text-muted { color: #4a5580; font-size: 12px; }
 </style>

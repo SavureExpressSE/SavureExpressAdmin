@@ -20,6 +20,13 @@ export default defineConfigWithVueTs(
 
   pluginVue.configs['flat/essential'],
   vueTsConfigs.recommended,
+
+  {
+    files: ['src/views/**/*.vue', 'src/layouts/**/*.vue'],
+    rules: {
+      'vue/multi-word-component-names': 'off',
+    },
+  },
   
   {
     ...pluginVitest.configs.recommended,

@@ -9,6 +9,7 @@ export interface MenuItem {
   name: string
   description: string | null
   price: number
+  imageUrl: string | null
 }
 export interface MenuItemPayload {
   id?: number
@@ -16,6 +17,7 @@ export interface MenuItemPayload {
   name: string
   description?: string
   price: number
+  imageUrl?: string
 }
 export interface MenuCategoryPayload { id?: number; name: string; description?: string }
 
@@ -66,6 +68,12 @@ export const menuService = {
     api.get<ApiResponse<boolean>>(`/menu-category/check-duplicate-category?category=${encodeURIComponent(name)}${excludeId != null ? `&excludeId=${excludeId}` : ''}`),
 
   // Items (universal)
+  uploadMenuItemImage: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('folder', 'menu-items')
+    return api.upload<ApiResponse<string>>('/api/files/upload', fd)
+  },
   getAllItems: () => api.get<ApiResponse<MenuItem[]>>('/menu-item'),
   saveItem: (payload: MenuItemPayload) =>
     api.post<ApiResponse<MenuItem>>('/menu-item', payload),

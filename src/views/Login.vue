@@ -24,11 +24,6 @@
       {{ loading ? 'Signing in…' : 'Login' }}
     </button>
   </form>
-
-  <p class="text-neutral-light text-sm text-center mt-4">
-    Don’t have an account?
-    <router-link class="text-secondary-light hover:underline" to="/register"> Sign up </router-link>
-  </p>
 </template>
 
 <script lang="ts" setup>

@@ -193,7 +193,6 @@ export const PHONE_COUNTRIES: PhoneCountry[] = [
   { iso: 'UG', name: 'Uganda',                           dial: '+256',   flag: '🇺🇬', len: [9,  9]  },
   { iso: 'UA', name: 'Ukraine',                          dial: '+380',   flag: '🇺🇦', len: [9,  9]  },
   { iso: 'GB', name: 'United Kingdom',                   dial: '+44',    flag: '🇬🇧', len: [10, 10] },
-  { iso: 'US', name: 'United States',                    dial: '+1',     flag: '🇺🇸', len: [10, 10] },
   { iso: 'UY', name: 'Uruguay',                          dial: '+598',   flag: '🇺🇾', len: [9,  9]  },
   { iso: 'UZ', name: 'Uzbekistan',                       dial: '+998',   flag: '🇺🇿', len: [9,  9]  },
   { iso: 'VU', name: 'Vanuatu',                          dial: '+678',   flag: '🇻🇺', len: [7,  7]  },

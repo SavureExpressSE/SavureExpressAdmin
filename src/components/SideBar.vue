@@ -49,6 +49,7 @@ const allGroups = [
     label: 'Operations',
     items: [
       { to: '/orders', icon: '📋', label: 'Orders' },
+      { to: '/payments', icon: '💳', label: 'Payments' },
       { to: '/reports', icon: '📈', label: 'Reports' },
       { to: '/notifications', icon: '🔔', label: 'Notifications' },
       { to: '/audit-log', icon: '🔍', label: 'Audit Log' },
@@ -62,6 +63,7 @@ const allGroups = [
       { to: '/master/menu', icon: '🍔', label: 'Menu' },
       { to: '/master/staff', icon: '👥', label: 'Staff' },
       { to: '/master/locations', icon: '🌍', label: 'Locations' },
+      { to: '/master/static-data', icon: '🗂️', label: 'Static Data' },
     ],
     adminOnly: true,
   },

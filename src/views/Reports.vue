@@ -71,7 +71,8 @@
           </div>
           <div class="legend-list">
             <div class="leg-row"><span class="leg-dot" style="background:#6c72ff"></span> DINE_IN <strong>{{ dineIn }}</strong></div>
-            <div class="leg-row"><span class="leg-dot" style="background:#f59e0b"></span> WALK_IN <strong>{{ walkIn }}</strong></div>
+            <div class="leg-row"><span class="leg-dot" style="background:#f59e0b"></span> TAKE_AWAY <strong>{{ takeAway }}</strong></div>
+            <div class="leg-row"><span class="leg-dot" style="background:#22c55e"></span> DELIVERY <strong>{{ delivery }}</strong></div>
           </div>
         </div>
       </div>
@@ -187,7 +188,8 @@ const activeOrders = computed(() => orderStore.orders.filter(o => !['COMPLETED',
 const orderRevenue = computed(() => orderStore.orders.filter(o => o.orderStatus === 'COMPLETED').reduce((s, o) => s + o.totalAmount, 0).toFixed(0))
 
 const dineIn = computed(() => orderStore.orders.filter(o => o.orderType === 'DINE_IN').length)
-const walkIn = computed(() => orderStore.orders.filter(o => o.orderType === 'WALK_IN').length)
+const takeAway = computed(() => orderStore.orders.filter(o => o.orderType === 'TAKE_AWAY').length)
+const delivery = computed(() => orderStore.orders.filter(o => o.orderType === 'DELIVERY').length)
 const dineInPct = computed(() => totalOrders.value ? Math.round((dineIn.value / totalOrders.value) * 100) : 0)
 
 const orderStatuses = [

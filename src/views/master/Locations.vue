@@ -38,6 +38,14 @@
             <FloatingInput v-model="countryForm.phoneLenMax" label="Phone max digits" />
           </div>
         </div>
+        <div class="form-row">
+          <div class="field-wrap" style="max-width:150px">
+            <FloatingInput v-model="countryForm.currency" label="Currency (e.g. INR)" />
+          </div>
+          <div class="field-wrap" style="max-width:180px">
+            <FloatingInput v-model="countryForm.locale" label="Locale (e.g. en-IN)" />
+          </div>
+        </div>
         <p v-if="countryFormError" class="error-msg">{{ countryFormError }}</p>
         <div class="form-actions">
           <button class="btn-primary" :disabled="!!countryNameError || !!countryCodeError" @click="saveCountry">{{ countryForm.id ? 'Update' : 'Save' }}</button>
@@ -284,6 +292,8 @@ const countryColumns = [
   { key: 'code',     label: 'Code',         sortable: true  },
   { key: 'dial',     label: 'Dial',         sortable: false },
   { key: 'phoneLen', label: 'Phone Digits', sortable: false },
+  { key: 'currency', label: 'Currency',     sortable: false },
+  { key: 'locale',   label: 'Locale',       sortable: false },
 ]
 const stateColumns = [
   { key: 'id', label: '#', sortable: true }, { key: 'name', label: 'Name', sortable: true }, { key: 'code', label: 'Code', sortable: true }, { key: 'countryName', label: 'Country' },
@@ -326,7 +336,7 @@ const cityFormError    = ref<string | null>(null)
 const cityNameError    = ref<string | null>(null)
 const zipcodeFormError = ref<string | null>(null)
 const zipcodeCodeError = ref<string | null>(null)
-const countryForm = reactive({ id: undefined as number | undefined, name: '', code: '', dial: '', flag: '', phoneLenMin: '' as string | number, phoneLenMax: '' as string | number })
+const countryForm = reactive({ id: undefined as number | undefined, name: '', code: '', dial: '', flag: '', phoneLenMin: '' as string | number, phoneLenMax: '' as string | number, currency: '', locale: '' })
 const stateForm   = reactive({ id: undefined as number | undefined, name: '', code: '', countryId: '' as any })
 const cityForm    = reactive({ id: undefined as number | undefined, name: '', countryId: '' as any, stateId: '' as any })
 const zipcodeForm = reactive({ id: undefined as number | undefined, code: '', countryId: '' as any, stateId: '' as any, cityId: '' as any })
@@ -343,7 +353,7 @@ function toggleForm(tab: keyof typeof forms) {
     if (tab === 'country') {
       isInitializingCountryForm = true
       countryFormError.value = null; countryNameError.value = null; countryCodeError.value = null
-      Object.assign(countryForm, { id: undefined, name: '', code: '', dial: '', flag: '', phoneLenMin: '', phoneLenMax: '' })
+      Object.assign(countryForm, { id: undefined, name: '', code: '', dial: '', flag: '', phoneLenMin: '', phoneLenMax: '', currency: '', locale: '' })
       nextTick(() => { isInitializingCountryForm = false })
     }
     if (tab === 'state') {
@@ -381,6 +391,8 @@ function editCountry(row: any) {
     flag: row.flag ?? '',
     phoneLenMin: row.phoneLenMin ?? '',
     phoneLenMax: row.phoneLenMax ?? '',
+    currency: row.currency ?? '',
+    locale: row.locale ?? '',
   })
   forms.country = true
   nextTick(() => { isInitializingCountryForm = false })

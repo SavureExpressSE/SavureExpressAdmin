@@ -141,6 +141,7 @@
         <button class="btn-icon" @click="openForm(row as Restaurant)">✏️</button>
         <button class="btn-icon" title="Manage Menu" @click="openMenuPanel((row as Restaurant))">🍔</button>
         <button class="btn-icon" title="Manage Tables" @click="openTablesPanel((row as Restaurant))">🪑</button>
+        <button class="btn-icon" title="Manage Terminals" @click="openTerminalsPanel((row as Restaurant))">🖥️</button>
         <button class="btn-icon danger" @click="remove(row.id)">🗑️</button>
       </template>
     </DataTable>
@@ -221,6 +222,78 @@
       </table>
     </div>
 
+    <!-- Kiosk Terminals Panel -->
+    <div v-if="terminalsPanel.restaurantId" class="menu-panel">
+      <div class="menu-panel-header">
+        <span class="section-title">Kiosk Terminals — {{ terminalsPanel.restaurantName }}</span>
+        <button class="btn-ghost btn-sm" @click="closeTerminalsPanel">✕ Close</button>
+      </div>
+
+      <div class="menu-item-form">
+        <div class="form-row" style="align-items:flex-start;flex-wrap:wrap;gap:12px;">
+          <FloatingInput v-model="terminalForm.terminalCode" label="Terminal Code * (e.g. T-001)" style="flex:1;min-width:140px;" />
+          <FloatingInput v-model="terminalForm.label" label="Label * (e.g. Counter 1)" style="flex:2;min-width:160px;" />
+          <button class="btn-primary btn-sm" style="align-self:center;" @click="saveTerminal">
+            {{ terminalForm.id ? 'Update' : '+ Add Terminal' }}
+          </button>
+          <button v-if="terminalForm.id" class="btn-ghost btn-sm" style="align-self:center;" @click="resetTerminalForm">Cancel</button>
+        </div>
+        <p v-if="terminalFormError" class="error-msg">{{ terminalFormError }}</p>
+      </div>
+
+      <div v-if="terminalsPanel.loading" class="loading-text">Loading…</div>
+      <div v-else-if="terminalsPanel.terminals.length === 0" class="empty-text">No terminals yet. Add one above.</div>
+      <table v-else class="menu-table">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Label</th>
+            <th>Status</th>
+            <th>Last Seen</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="t in terminalsPanel.terminals" :key="t.id">
+            <td><span class="badge">{{ t.terminalCode }}</span></td>
+            <td>{{ t.label }}</td>
+            <td>
+              <span :class="t.isActive ? 'avail-yes' : 'avail-no'">
+                {{ t.isActive ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+            <td class="qr-cell">{{ t.lastSeenAt ? new Date(t.lastSeenAt).toLocaleString() : 'Never' }}</td>
+            <td class="actions-cell" style="white-space:nowrap;">
+              <button class="btn-icon" title="Edit" @click="editTerminal(t)">✏️</button>
+              <button class="btn-icon" :title="t.isActive ? 'Deactivate' : 'Activate'" @click="toggleTerminal(t.id)">
+                {{ t.isActive ? '🔴' : '🟢' }}
+              </button>
+              <button class="btn-icon" title="Rotate API Key" @click="rotateTerminalKey(t.id)">🔑</button>
+              <button class="btn-icon danger" title="Delete" @click="removeTerminal(t.id)">🗑️</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- API Key Modal (shown once on create / rotate) -->
+    <div v-if="apiKeyModal.visible" class="modal-overlay" @click.self="apiKeyModal.visible = false">
+      <div class="modal-card">
+        <div class="modal-title">🔑 {{ apiKeyModal.isRotate ? 'New API Key Generated' : 'Terminal API Key' }}</div>
+        <p class="modal-desc">
+          Copy this key and paste it into the kiosk Config Screen.
+          <strong>It will not be shown again.</strong>
+        </p>
+        <div class="api-key-box">
+          <span class="api-key-text">{{ apiKeyModal.key }}</span>
+          <button class="btn-copy" @click="copyApiKey">{{ copied ? '✓ Copied' : 'Copy' }}</button>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-primary btn-sm" @click="apiKeyModal.visible = false">Done</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Restaurant Tables Panel -->
     <div v-if="tablesPanel.restaurantId" class="menu-panel">
       <div class="menu-panel-header">
@@ -285,6 +358,7 @@ import { restaurantService, type Restaurant, type RestaurantPayload } from '@/se
 import { menuService, type RestaurantMenuItem } from '@/services/menu-service'
 import type { MenuItem } from '@/services/menu-service'
 import { tableService, type DiningTable } from '@/services/table-service'
+import { terminalService, type KioskTerminal } from '@/services/terminal-service'
 import { locationService } from '@/services/location-service'
 
 // ── Restaurant table ──────────────────────────────────────────────────────────
@@ -840,6 +914,125 @@ async function removeTable(id: number) {
   }
 }
 
+// ── Kiosk Terminals Panel ─────────────────────────────────────────────────────
+const terminalsPanel = reactive({
+  restaurantId: null as number | null,
+  restaurantName: '',
+  terminals: [] as KioskTerminal[],
+  loading: false,
+})
+
+const blankTerminalForm = () => ({ id: undefined as number | undefined, terminalCode: '', label: '' })
+const terminalForm = reactive(blankTerminalForm())
+const terminalFormError = ref<string | null>(null)
+
+const apiKeyModal = reactive({ visible: false, key: '', isRotate: false })
+const copied = ref(false)
+
+async function openTerminalsPanel(restaurant: Restaurant) {
+  terminalsPanel.restaurantId = restaurant.id
+  terminalsPanel.restaurantName = restaurant.name
+  resetTerminalForm()
+  await loadTerminalsPanel()
+}
+
+function closeTerminalsPanel() {
+  terminalsPanel.restaurantId = null
+  terminalsPanel.restaurantName = ''
+  terminalsPanel.terminals = []
+  resetTerminalForm()
+}
+
+async function loadTerminalsPanel() {
+  if (!terminalsPanel.restaurantId) return
+  terminalsPanel.loading = true
+  try {
+    const res = await terminalService.getByRestaurant(terminalsPanel.restaurantId)
+    terminalsPanel.terminals = res.data
+  } finally {
+    terminalsPanel.loading = false
+  }
+}
+
+function resetTerminalForm() {
+  Object.assign(terminalForm, blankTerminalForm())
+  terminalFormError.value = null
+}
+
+function editTerminal(t: KioskTerminal) {
+  Object.assign(terminalForm, { id: t.id, terminalCode: t.terminalCode, label: t.label })
+  terminalFormError.value = null
+}
+
+async function saveTerminal() {
+  if (!terminalForm.terminalCode.trim() || !terminalForm.label.trim()) {
+    terminalFormError.value = 'Terminal code and label are required'
+    return
+  }
+  terminalFormError.value = null
+  try {
+    const isEdit = !!terminalForm.id
+    const res = isEdit
+      ? await terminalService.update({ id: terminalForm.id, restaurantId: terminalsPanel.restaurantId!, terminalCode: terminalForm.terminalCode, label: terminalForm.label })
+      : await terminalService.create({ restaurantId: terminalsPanel.restaurantId!, terminalCode: terminalForm.terminalCode, label: terminalForm.label })
+
+    if (!isEdit && res.data.rawApiKey) {
+      apiKeyModal.key = res.data.rawApiKey
+      apiKeyModal.isRotate = false
+      apiKeyModal.visible = true
+      copied.value = false
+    }
+    resetTerminalForm()
+    await loadTerminalsPanel()
+  } catch (e: any) {
+    terminalFormError.value = e.message
+  }
+}
+
+async function toggleTerminal(id: number) {
+  try {
+    await terminalService.toggleActive(id)
+    await loadTerminalsPanel()
+  } catch (e: any) {
+    alert(e.message)
+  }
+}
+
+async function rotateTerminalKey(id: number) {
+  if (!await confirm('Rotate the API key for this terminal? The kiosk will need to be reconfigured with the new key.')) return
+  try {
+    const res = await terminalService.rotateKey(id)
+    if (res.data.rawApiKey) {
+      apiKeyModal.key = res.data.rawApiKey
+      apiKeyModal.isRotate = true
+      apiKeyModal.visible = true
+      copied.value = false
+    }
+  } catch (e: any) {
+    alert(e.message)
+  }
+}
+
+async function removeTerminal(id: number) {
+  if (!await confirm('Delete this terminal? The kiosk using this key will lose access immediately.')) return
+  try {
+    await terminalService.delete(id)
+    await loadTerminalsPanel()
+  } catch (e: any) {
+    alert(e.message)
+  }
+}
+
+async function copyApiKey() {
+  try {
+    await navigator.clipboard.writeText(apiKeyModal.key)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  } catch {
+    // Fallback for environments without clipboard API
+  }
+}
+
 onMounted(async () => {
   await loadCountries()
   await load()
@@ -900,4 +1093,16 @@ onMounted(async () => {
 .loading-text { color: #aeb9e1; font-size: 14px; }
 .empty-text { color: #4a5580; font-size: 13px; text-align: center; padding: 20px; }
 .qr-cell { font-size: 12px; color: #7e89ac; font-family: monospace; }
+
+/* API Key Modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal-card { background: #212c4d; border-radius: 14px; padding: 28px 28px 24px; width: min(480px, 90vw); display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+.modal-title { color: #fff; font-size: 16px; font-weight: 700; }
+.modal-desc { color: #aeb9e1; font-size: 13px; line-height: 1.5; margin: 0; }
+.modal-desc strong { color: #f59e0b; }
+.api-key-box { display: flex; align-items: center; gap: 10px; background: #1a2240; border: 1px solid #37446b; border-radius: 8px; padding: 12px 14px; }
+.api-key-text { flex: 1; font-family: monospace; font-size: 13px; color: #57c3ff; word-break: break-all; }
+.btn-copy { background: #37446b; color: #d1dbf9; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer; white-space: nowrap; transition: background 0.2s; }
+.btn-copy:hover { background: #4a5580; }
+.modal-actions { display: flex; justify-content: flex-end; }
 </style>

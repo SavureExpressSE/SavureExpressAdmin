@@ -21,6 +21,7 @@ const router = createRouter({
         { path: 'dashboard', name: 'Dashboard', component: () => import('@/views/Dashboard.vue') },
         // Operations
         { path: 'orders', name: 'Orders', component: () => import('@/views/Orders.vue') },
+        { path: 'payments', name: 'Payments', component: () => import('@/views/Payments.vue') },
         { path: 'reports', name: 'Reports', component: () => import('@/views/Reports.vue') },
         { path: 'notifications', name: 'Notifications', component: () => import('@/views/Notifications.vue') },
         { path: 'audit-log', name: 'AuditLog', component: () => import('@/views/AuditLog.vue') },
@@ -30,6 +31,7 @@ const router = createRouter({
         { path: 'master/tables', name: 'MasterTables', component: () => import('@/views/master/Tables.vue') },
         { path: 'master/staff', name: 'MasterStaff', component: () => import('@/views/master/Staff.vue') },
         { path: 'master/locations', name: 'MasterLocations', component: () => import('@/views/master/Locations.vue') },
+        { path: 'master/static-data', name: 'MasterStaticData', component: () => import('@/views/master/StaticData.vue') },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
